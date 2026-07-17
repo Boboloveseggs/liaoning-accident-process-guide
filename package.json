@@ -1,0 +1,8 @@
+{
+  "name": "liaoning-accident-process-guide",
+  "version": "0.8.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/locator.test.js"
+  }
+}
