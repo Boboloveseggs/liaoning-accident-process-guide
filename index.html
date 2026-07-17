@@ -36,7 +36,139 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}button:
 <div class="app">
   <div class="top"><div><div class="eyebrow">辽宁 · 道路事故处理</div><div class="title">道路事故进程导航</div><div class="sub">从你的视角，只看这一刻要做的事</div></div><div class="version">辽宁试行版</div></div>
   <section id="chooseView" class="view active"><div class="panel"><h2>谁撞了谁？</h2><p>先选事故组合，再选你是哪一方。</p><div class="scenario-grid" id="scenarioGrid"></div><div class="more-wrap"><button class="more-toggle" id="moreBtn">更多情况</button><div class="scenario-grid secondary-grid" id="secondaryScenarioGrid"></div></div><div class="role-box" id="roleBox"><h2>你是哪一方？</h2><p>之后所有提示都只从你的视角出发。</p><div class="role-row" id="roleRow"></div><button class="enter" id="enterBtn" disabled>进入我的处理进度</button></div></div></section>
-  <section id="flowView" class="view"><div class="toolbar"><button …6385 tokens truncated…start,todayDate());const due=addWorkdays(start,total);const remaining=Math.max(0,total-elapsed);const status=elapsed>total?'over':remaining<=3?'near':'normal';const covered=start.getFullYear()===2026&&due.getFullYear()===2026;return{start,elapsed,due,remaining,total,status,unit:'工作日',covered}}
+  <section id="flowView" class="view"><div class="toolbar"><button class="back" id="backBtn">← 重新选择</button><div class="identity">当前视角<b id="identityLabel"></b></div></div><div class="progress-card"><div class="stage-summary"><div class="where">当前主阶段 <span class="stage-count" id="stageCount"></span><strong id="currentLabel"></strong></div><div class="parallel-line"><span>同时进行</span><strong id="parallelLabel"></strong></div></div><div class="timeline" id="timeline" aria-label="事故处理主阶段"></div><div class="stage-hint">点选最符合现状的主阶段；治疗和保存材料可以同时进行，不必等待责任认定。</div><div class="main-two"><section class="main-card self"><h3>我现在应该干什么</h3><ol id="selfActions"></ol></section><section class="main-card others"><h3>别人／官方正在干什么</h3><p id="othersAction"></p></section></div><div class="folds"><button class="fold" data-fold="wait" aria-controls="drawer" aria-expanded="false">还要等多久</button><button class="fold" data-fold="how" aria-controls="drawer" aria-expanded="false">具体怎么做</button><button class="fold" data-fold="materials" aria-controls="drawer" aria-expanded="false">我的材料</button><button class="fold" data-fold="why" aria-controls="drawer" aria-expanded="false">为什么这样</button><button class="fold" data-fold="official" aria-controls="drawer" aria-expanded="false">联系官方机构</button></div><div class="drawer" id="drawer" role="region" aria-label="阶段详细信息" tabindex="-1"></div><div class="record-note"><span>进度、日期和材料状态仅保存在这台设备的浏览器中。</span><button type="button" class="clear-data" id="clearDataBtn">清除本机记录</button></div><div class="foot">本工具用于整理办理步骤，不替代承办机构说明或专业法律意见。交管工作日按2026年国务院节假日安排校准；其他年份会提示人工核对。保险条例中的“5日”按自然日展示。</div></div></section>
+</div>
+<script>
+const SOURCE_ROAD='https://www.moj.gov.cn/pub/sfbgw/flfggz/flfggzbmgz/201709/t20170919_146045.html';
+const SOURCE_INS='https://xzfg.moj.gov.cn/front/law/detail?LawID=162';
+const SOURCE_HOLIDAY='https://big5.www.gov.cn/gate/big5/www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm';
+const scenarios=[
+{id:'ebike-pedestrian',label:'电动车撞行人',hasInsurance:false,priority:'primary',roles:[{id:'pedestrian',label:'我是行人'},{id:'rider',label:'我是骑电动车的人'}]},
+{id:'car-ebike',label:'汽车撞电动车',hasInsurance:true,priority:'primary',roles:[{id:'rider',label:'我是骑电动车的人'},{id:'driver',label:'我是汽车驾驶人'}]},
+{id:'ebike-car',label:'电动车撞汽车',hasInsurance:true,priority:'primary',roles:[{id:'rider',label:'我是骑电动车的人'},{id:'driver',label:'我是汽车驾驶人'}]},
+{id:'ebike-ebike',label:'电动车撞电动车',hasInsurance:false,priority:'primary',roles:[{id:'rider-a',label:'我是其中一名骑行人'},{id:'rider-b',label:'我是另一名骑行人'}]},
+{id:'car-pedestrian',label:'汽车撞行人',hasInsurance:true,priority:'secondary',roles:[{id:'pedestrian',label:'我是行人'},{id:'driver',label:'我是汽车驾驶人'}]},
+{id:'other',label:'其他事故情况',hasInsurance:true,priority:'secondary',roles:[{id:'injured-party',label:'我是受伤或受损的一方'},{id:'other-party',label:'我是另一方当事人'},{id:'related-person',label:'我是乘客或其他相关人'}]}
+];
+const commonMedical=[
+['门急诊病历、住院病案或出院记录','证明治疗经过'],['诊断证明、检查报告、影像资料','证明伤情和诊疗结论'],['处方、医药费和住院费票据','证明已经发生的医疗费用'],['住院费用明细、门诊费用清单','核对费用项目'],['复诊记录和后续治疗医嘱','证明后续治疗必要性']
+];
+const lossMaterials=[
+['休假或误工相关证明','证明误工时间'],['工资流水、收入证明或纳税资料','证明收入损失'],['护理必要性证明及护理费凭证','证明护理需求和费用'],['与就医相符的交通票据','证明合理交通支出'],['辅助器具票据和医疗建议','存在辅助器具需求时保存']
+];
+const stages=[
+{id:'T00',label:'事故刚发生',self:['先确认自己和周围人是否受伤。','在安全前提下报警、留住对方信息并保存现场。'],others:'接警人员会根据伤情和现场情况决定急救、出警或其他处置。',why:'后续责任认定、治疗和赔偿都依赖现场信息、身份信息与早期医疗记录。',how:['有人受伤或无法确认伤情时，优先拨打120和122。','拍摄现场全景、车辆位置、碰撞部位、车牌或车辆特征。','记录对方姓名、电话和可以确认身份的信息。'],materials:[['现场证据',[['现场全景和道路环境','保留事故位置与道路情况'],['双方车辆或电动车位置','保留碰撞关系'],['碰撞部位和损坏情况','保留痕迹'],['车牌、车辆特征和对方联系方式','防止后续无法联系']]]],wait:{type:'immediate',summary:'现在不应等待',sub:'先完成救助、报警与基础取证',flows:[{id:'now',label:'当前',steps:[['事故发生','立即'],['确认安全与伤情','立即'],['报警并取证','立即']]}]},official:{name:'120／122／110',text:'伤情优先120；道路交通事故处理优先122；存在冲突、逃逸等情况可联系110。',url:SOURCE_ROAD}},
+{id:'T10',label:'交警到场',self:['如实说明经过，并明确说出自己哪里不舒服。','签字前核对笔录或现场记录。'],others:'交警正在询问双方、固定证据，并判断是否需要检验鉴定。',why:'现场调查决定后续适用简易程序、一般程序还是鉴定路径。',how:['只说明自己看到和经历的事实。','确认承办单位、联系方式和后续通知方式。','离开前询问是否需要补充材料或进一步检查。'],materials:[['交警联系信息',[['承办交警或单位联系卡','后续询问进度'],['报警记录或受案信息','证明已经报警'],['自己签署或收到的现场文书','核对内容和送达日期']]]],wait:{type:'onsite',summary:'现场处置时间没有统一固定分钟数',sub:'关键是确认案件转入哪条处理路径',flows:[{id:'onsite',label:'现场流程',steps:[['询问与勘查','进行中'],['判断是否鉴定','分支点'],['简易／一般／鉴定','决定后续时间']]}]},official:{name:'承办交警',text:'询问承办单位、后续通知方式以及是否进入检验鉴定。',url:SOURCE_ROAD}},
+{id:'T20',label:'已离开现场',self:['身体不适就及时就医。','保存医疗材料、现场材料和交警联系方式。'],others:'交警可能正在核对监控、证人证言、车辆痕迹或启动鉴定。',why:'离开现场只是结束现场处置，事故调查、治疗和损失形成仍在继续。',how:['就医时如实说明事故时间和受伤经过。','所有病历、报告、票据按日期保存。','伤情未明确前，不草率签署放弃后续费用的协议。'],materials:[['继续治疗必须保存',commonMedical],['同时保存',[['现场照片和视频','后续认定与赔偿'],['报警记录、承办单位联系方式','询问进度'],['对方身份和联系方式','协商、调解或诉讼']]]],wait:{type:'recognition',summary:'责任认定可能是当场、3个工作日、10个工作日或更长',sub:'取决于简易程序、一般程序或检验鉴定',flows:[{id:'simple',label:'简易程序',steps:[['固定现场证据','起点'],['制作认定书','当场／3个工作日内'],['送达','通常现场或随制作'] ]},{id:'general',label:'一般程序',steps:[['现场调查','起算'],['制作认定书','第10个工作日内'],['送达','制作后3个工作日内']]},{id:'appraisal',label:'需要鉴定',steps:[['调查结束','起点'],['3个工作日内委托','3日'],['检验鉴定','≤30日／批准后≤60日'],['认定书','意见确定后5个工作日'],['送达','制作后3个工作日内']]}]},official:{name:'承办交警／医疗机构',text:'交警负责调查与认定；医疗机构负责诊疗并形成医疗记录。',url:SOURCE_ROAD}},
+{id:'T30',label:'等待责任认定',self:['继续治疗并保存材料。','确认自己走的是简易、一般还是鉴定路径。'],others:'交警正在完成调查，或等待检验鉴定结果后制作认定书。',why:'10个工作日并非所有事故都从事故当天机械计算；鉴定路径的起算点会改变。',how:['记下现场调查日期。','询问是否已委托检验鉴定。','收到认定书后记录送达日期；复核期限从送达开始。'],materials:[['等待期间继续保存',commonMedical],['收到文书后保存',[['道路交通事故认定书或事故证明','核对事实、责任及送达日期'],['短信、签收记录或送达凭证','计算复核等期限']]]],wait:{type:'recognition',summary:'先确认你的处理路径',sub:'一般程序是现场调查之日起10个工作日内；鉴定路径另算',flows:[{id:'simple',label:'简易程序',steps:[['固定证据','起点'],['制作认定书','当场／3个工作日内']]},{id:'general',label:'一般程序',steps:[['现场调查','第0日'],['交警调查','第1—9个工作日'],['制作认定书','第10个工作日内'],['送达','制作后3个工作日内']]},{id:'appraisal',label:'需要鉴定',steps:[['调查结束','起点'],['委托鉴定','3个工作日内'],['检验鉴定','30日内／最长60日'],['制作认定书','意见确定后5个工作日'],['送达','制作后3个工作日内']]},{id:'review',label:'收到后有异议',steps:[['认定书送达','起点'],['提交复核','3个工作日内'],['复核审查','受理后30日内'],['结论送达','作出后3个工作日内']]}]},official:{name:'承办交警／上一级交管部门',text:'先向承办单位确认是否进入鉴定；收到认定书后有异议，注意3个工作日复核期限。',url:SOURCE_ROAD}},
+{id:'T40',label:'治疗与赔偿',self:['继续治疗并按日期整理全部医疗材料。','确认材料是否已经正式提交、收齐和进入核定。'],others:'医疗机构在形成诊疗记录；对方、保险公司或调解人员可能在核对责任和损失。',why:'保险或协商的等待时间通常从“正式申请”“材料收齐”或“达成协议”开始，而不是从事故当天开始。',how:['每次就医后立即收好病历、报告、票据和费用明细。','伤情稳定后再汇总医疗费、误工、护理、交通等损失。','有汽车参与时，要求保险公司明确缺什么材料以及是否已经收齐。'],materials:[['医疗核心材料',commonMedical],['损失证明材料',lossMaterials],['事故与赔偿材料',[['事故认定书、身份证明和联系方式','证明事故及当事人信息'],['保险报案号、材料清单和接收回执','有汽车参与时确认理赔起算点'],['双方沟通记录和书面协议','无保险或保险不足时保存']]]],wait:{type:'compensation',summary:'材料是否正式收齐，决定很多期限是否已经开始',sub:'有汽车参与时显示保险线；无汽车时没有统一保险倒计时',flows:[]},official:{name:'保险公司／调解机构',text:'有机动车参与时联系承保保险公司；无保险或保险不足时，可协商、人民调解或申请交警调解。',url:SOURCE_INS}},
+{id:'T50',label:'争议或结案',self:['赔款到账后保存凭证并归档。','对认定、赔偿或履行有争议时，选择复核、调解、诉讼或执行。'],others:'调解组织、上一级交管部门或法院只在相应程序被启动后介入。',why:'责任认定不等于自动收到赔偿，真正结案取决于协议履行、赔款到账或生效文书执行。',how:['对认定有异议，优先检查3个工作日复核期限。','申请交警调解通常需要各方一致在法定期限内书面申请。','已有协议或生效文书但对方不付款时，保存催款和未履行证据。'],materials:[['争议处理材料',[['事故认定书、复核结论及送达证明','计算期限'],['全部医疗和损失证明','提出赔偿请求'],['协商记录、协议和付款凭证','证明是否达成及是否履行'],['对方身份和可用送达地址','调解或诉讼使用']]]],wait:{type:'dispute',summary:'不同救济程序的起算点不同',sub:'先选择你正在走哪条路',flows:[{id:'review',label:'事故认定复核',steps:[['认定书送达','起点'],['申请复核','3个工作日内'],['复核结论','受理后30日内'],['结论送达','3个工作日内']]},{id:'mediation',label:'交警调解',steps:[['认定书或复核结论送达','起点'],['共同书面申请','10个工作日内'],['治疗终结／定残／损失确定','调解起点'],['调解书或终结书','10个工作日内']]},{id:'lawsuit',label:'起诉／执行',steps:[['整理起诉材料','先完成'],['法院接收并审查','以正式收件为准'],['审理与生效','视程序而定'],['不履行则申请执行','另行启动']]}]},official:{name:'上一级交管部门／调解组织／人民法院',text:'根据争议对象选择复核、调解、起诉或执行，不要把不同程序的期限混在一起。',url:SOURCE_ROAD}}
+];
+const stageEnhancements={
+  T00:{parallel:'救助伤者与保存现场证据',materialPhase:'site',deadlineType:'none',self:['先确认自己和周围人是否受伤。','在安全前提下报警并保存现场证据。']},
+  T10:{parallel:'治疗与保存现场材料',materialPhase:'site',deadlineType:'none',self:['如实说明事故经过和身体不适。','签字前核对笔录与现场记录。']},
+  T20:{parallel:'治疗与材料保存',materialPhase:'treatment',deadlineType:'recognition',self:['按医嘱治疗、复查。','保存病历、票据和检查报告。']},
+  T30:{parallel:'治疗与材料保存',materialPhase:'treatment',deadlineType:'recognition',self:['按医嘱治疗、复查。','保存病历、票据和检查报告。'],others:'交警正在调查事故经过，并准备制作事故认定书。'},
+  T40:{parallel:'责任文书核对与继续治疗',materialPhase:'compensation',deadlineType:'insurance',self:['确认材料是否已被机构确认收齐。','整理医疗、误工、护理和交通费用证明。']},
+  T50:{parallel:'继续治疗或等待履行',materialPhase:'compensation',deadlineType:'review',self:['核对事故认定书和赔偿履行情况。','有异议时立即判断复核、调解或诉讼期限。']}
+};
+stages.forEach(stage=>Object.assign(stage,stageEnhancements[stage.id]));
+const roleActionOverrides={
+  driver:{
+    T00:['先确认人员伤情并报警。','立即通知保险公司，保存报案号。'],
+    T10:['如实说明经过，出示驾驶证、行驶证和保险信息。','签字前核对笔录与现场记录。'],
+    T20:['配合交警和保险公司调查。','保存现场、报案及对方治疗沟通记录。'],
+    T30:['确认交警记录的现场调查日期及是否进入鉴定。','保持保险报案畅通，保存每次材料往来记录。'],
+    T40:['确认保险公司已经实际收到所需证明和资料。','核对对方提交的损失材料及保险处理进度。'],
+    T50:['核对认定书、保险核定和赔款履行情况。','有异议时立即判断复核、调解或诉讼期限。']
+  },
+  claimant:{
+    T00:['先确认伤情；不适或无法判断时及时就医。','在安全前提下报警并保存现场证据。'],
+    T10:['如实说明事故经过和身体不适。','签字前核对笔录与现场记录。'],
+    T20:['按医嘱治疗、复查。','保存病历、票据和检查报告。'],
+    T30:['按医嘱治疗、复查。','保存病历、票据和检查报告。'],
+    T40:['确认保险公司已经实际收到所需证明和资料。','整理医疗、误工、护理和交通费用证明。'],
+    T50:['核对事故认定书和赔偿到账情况。','有异议时立即判断复核、调解或诉讼期限。']
+  },
+  related:{
+    T00:['先协助确认伤情并报警。','保存自己看到的现场情况和联系方式。'],
+    T10:['只陈述自己亲历的事实。','保存交警或承办单位联系方式。'],
+    T20:['保存询问记录及自己持有的证据。','需要治疗时按医嘱就医并留存材料。'],
+    T30:['保持联系方式畅通。','保存交警通知、短信和文书。'],
+    T40:['确认自己需要提交或配合的材料。','保存全部交接记录。'],
+    T50:['核对自己涉及的文书和履行事项。','必要时向承办机构确认自己的程序身份。']
+  }
+};
+const materialCatalog={
+  site:['现场照片、视频','车牌和车辆照片','对方姓名、电话','交警联系方式','证人和监控线索'],
+  driverSite:['驾驶证和行驶证','保险单或电子保单','保险报案号'],
+  treatment:['门诊病历','诊断证明','检查报告','影像资料','处方','医疗票据','费用明细','复诊记录','出院记录','休假证明','收入或误工证明','护理证明'],
+  compensation:['事故认定书','身份证明','收款账户','医疗材料','误工、护理、交通费用证明','资料送达凭证'],
+  driverCompensation:['事故认定书','驾驶证和行驶证','保险单与报案记录','对方提交的损失材料','保险核定通知','资料送达凭证']
+};
+const defaultDeadlineState=()=>({
+  recognition:{investigationEnded:'',appraisal:'',investigationEndDate:'',appraisalOpinionDate:'',received:'no',receivedDate:''},
+  insurance:{availability:'',materialsReceived:'',materialsReceivedDate:'',supplementRequested:''}
+});
+let deadlineState=defaultDeadlineState();
+let selectedScenario=null,selectedRole=null,currentIndex=0,openFold='',activeWaitFlow='',materialStates={},moreOpen=false;
+const STORAGE_KEY='liaoning-accident-flow-v1';
+function roleGroup(){if(selectedRole?.id==='driver')return'driver';if(['related-person','other-party'].includes(selectedRole?.id))return'related';return'claimant'}
+function actionsFor(stage){return roleActionOverrides[roleGroup()]?.[stage.id]||stage.self}
+function materialsFor(stage){if(stage.materialPhase==='site')return roleGroup()==='driver'?[...materialCatalog.site,...materialCatalog.driverSite]:materialCatalog.site;if(stage.materialPhase==='compensation')return roleGroup()==='driver'?materialCatalog.driverCompensation:materialCatalog.compensation;return materialCatalog[stage.materialPhase]||[]}
+function saveState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({scenarioId:selectedScenario?.id||'',roleId:selectedRole?.id||'',currentIndex,deadlineState,materialStates,moreOpen}))}catch(error){}}
+function restoreState(){try{const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');if(!saved)return false;selectedScenario=scenarios.find(item=>item.id===saved.scenarioId)||null;selectedRole=selectedScenario?.roles.find(item=>item.id===saved.roleId)||null;currentIndex=Math.max(0,Math.min(stages.length-1,Number(saved.currentIndex)||0));deadlineState={recognition:{...defaultDeadlineState().recognition,...saved.deadlineState?.recognition},insurance:{...defaultDeadlineState().insurance,...saved.deadlineState?.insurance}};materialStates=saved.materialStates&&typeof saved.materialStates==='object'?saved.materialStates:{};moreOpen=Boolean(saved.moreOpen||selectedScenario?.priority==='secondary');return Boolean(selectedScenario&&selectedRole)}catch(error){return false}}
+const chooseView=document.getElementById('chooseView'),flowView=document.getElementById('flowView'),scenarioGrid=document.getElementById('scenarioGrid'),secondaryScenarioGrid=document.getElementById('secondaryScenarioGrid'),moreBtn=document.getElementById('moreBtn'),roleBox=document.getElementById('roleBox'),roleRow=document.getElementById('roleRow');
+function scenarioButton(s){const active=selectedScenario&&s.id===selectedScenario.id;return `<button class="scenario ${active?'active':''}" data-scenario="${s.id}" aria-pressed="${active?'true':'false'}"><strong>${s.label}</strong><span class="scenario-mark" aria-hidden="true">${active?'✓':'›'}</span></button>`}
+function renderScenarios(){
+  scenarioGrid.innerHTML=scenarios.filter(s=>s.priority==='primary').map(scenarioButton).join('');
+  secondaryScenarioGrid.innerHTML=scenarios.filter(s=>s.priority==='secondary').map(scenarioButton).join('');
+  secondaryScenarioGrid.classList.toggle('show',moreOpen);
+  moreBtn.classList.toggle('open',moreOpen);
+  document.querySelectorAll('[data-scenario]').forEach(button=>{
+    button.onclick=()=>{
+      const nextScenario=scenarios.find(s=>s.id===button.dataset.scenario);
+      if(!selectedScenario||selectedScenario.id!==nextScenario.id){selectedRole=null;currentIndex=0;deadlineState=defaultDeadlineState();openFold='';activeWaitFlow=''}
+      selectedScenario=nextScenario;
+      renderScenarios();
+      renderRoles();
+      saveState();
+      roleBox.scrollIntoView({behavior:'smooth',block:'nearest'});
+    };
+  });
+}
+function renderRoles(){
+  roleBox.classList.toggle('show',Boolean(selectedScenario));
+  document.getElementById('enterBtn').disabled=!(selectedScenario&&selectedRole);
+  document.getElementById('enterBtn').textContent=currentIndex>0?'继续我的处理进度':'进入我的处理进度';
+  if(!selectedScenario){
+    roleRow.innerHTML='';
+    return;
+  }
+  roleRow.innerHTML=selectedScenario.roles.map(r=>{const active=selectedRole&&r.id===selectedRole.id;return `<button class="role ${active?'active':''}" data-id="${r.id}" aria-pressed="${active?'true':'false'}">${r.label}</button>`}).join('');
+  roleRow.querySelectorAll('.role').forEach(button=>{
+    button.onclick=()=>{
+      selectedRole=selectedScenario.roles.find(r=>r.id===button.dataset.id);
+      renderRoles();
+      saveState();
+    };
+  });
+}
+function identityText(){return `${selectedRole.label}｜${selectedScenario.label}`}
+function renderTimeline(){const timeline=document.getElementById('timeline');timeline.innerHTML='';stages.forEach((s,i)=>{const tp=document.createElement('button');tp.type='button';tp.className=`tp ${i===currentIndex?'active':''} ${i<currentIndex?'done':''}`;tp.setAttribute('aria-label',`第${i+1}阶段：${s.label}`);tp.setAttribute('aria-current',i===currentIndex?'step':'false');tp.innerHTML=`<span class="dot">${i+1}</span><span class="tp-label">${s.label}</span>`;tp.onclick=()=>{currentIndex=i;openFold='';activeWaitFlow='';saveState();renderFlow()};timeline.appendChild(tp);if(i<stages.length-1){const e=document.createElement('div');e.className=`edge ${i<currentIndex?'done':''}`;e.setAttribute('aria-hidden','true');timeline.appendChild(e)}});requestAnimationFrame(()=>{const active=timeline.querySelector('.tp.active');if(active&&matchMedia('(max-width:720px)').matches){timeline.scrollTo({left:active.offsetLeft-(timeline.clientWidth-active.offsetWidth)/2,behavior:'smooth'})}})}
+function renderFlow(){const s=stages[currentIndex];document.body.classList.add('flowing');document.getElementById('identityLabel').textContent=identityText();document.getElementById('stageCount').textContent=`${currentIndex+1} / ${stages.length}`;document.getElementById('currentLabel').textContent=s.label;document.getElementById('parallelLabel').textContent=s.parallel;document.getElementById('selfActions').innerHTML=actionsFor(s).slice(0,2).map(x=>`<li>${x}</li>`).join('');document.getElementById('othersAction').textContent=s.others;renderTimeline();renderDrawer()}
+const statusLabels={not_started:'期限尚未开始',waiting:'等待确认',normal:'正常期限内',near:'临近期限',over:'可能超期',received:'已收到认定书'};
+function localDate(value){if(!value)return null;const parts=value.split('-').map(Number);return new Date(parts[0],parts[1]-1,parts[2])}
+function todayDate(){const now=new Date();return new Date(now.getFullYear(),now.getMonth(),now.getDate())}
+function todayIso(){const d=todayDate(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+function dateIso(date){const pad=n=>String(n).padStart(2,'0');return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`}
+const HOLIDAYS_2026=new Set(['2026-01-01','2026-01-02','2026-01-03','2026-02-15','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-21','2026-02-22','2026-02-23','2026-04-04','2026-04-05','2026-04-06','2026-05-01','2026-05-02','2026-05-03','2026-05-04','2026-05-05','2026-06-19','2026-06-20','2026-06-21','2026-09-25','2026-09-26','2026-09-27','2026-10-01','2026-10-02','2026-10-03','2026-10-04','2026-10-05','2026-10-06','2026-10-07']);
+const WORKDAYS_2026=new Set(['2026-01-04','2026-02-14','2026-02-28','2026-05-09','2026-09-20','2026-10-10']);
+function isWorkday(date){const iso=dateIso(date);if(WORKDAYS_2026.has(iso))return true;if(HOLIDAYS_2026.has(iso))return false;const day=date.getDay();return day!==0&&day!==6}
+function addWorkdays(start,count){const date=new Date(start);let added=0;while(added<count){date.setDate(date.getDate()+1);if(isWorkday(date))added++}return date}
+function countWorkdays(start,end){if(!start||!end||end<start)return 0;const date=new Date(start);let count=0;while(date<end){date.setDate(date.getDate()+1);if(isWorkday(date))count++}return count}
+function formatDate(date){return date?`${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日`:'尚不能计算'}
+function computeDeadline(startValue,total){const start=localDate(startValue);if(!start)return null;const elapsed=countWorkdays(start,todayDate());const due=addWorkdays(start,total);const remaining=Math.max(0,total-elapsed);const status=elapsed>total?'over':remaining<=3?'near':'normal';const covered=start.getFullYear()===2026&&due.getFullYear()===2026;return{start,elapsed,due,remaining,total,status,unit:'工作日',covered}}
 function calendarDayDifference(start,end){if(!start||!end||end<start)return 0;const utcStart=Date.UTC(start.getFullYear(),start.getMonth(),start.getDate()),utcEnd=Date.UTC(end.getFullYear(),end.getMonth(),end.getDate());return Math.floor((utcEnd-utcStart)/86400000)}
 function computeCalendarDeadline(startValue,total){const start=localDate(startValue);if(!start)return null;const elapsed=calendarDayDifference(start,todayDate());const due=new Date(start);due.setDate(due.getDate()+total);const remaining=Math.max(0,total-elapsed);const status=elapsed>total?'over':remaining<=3?'near':'normal';return{start,elapsed,due,remaining,total,status,unit:'日',covered:true}}
 function choiceButtons(group,field,value,options){return `<div class="choice-row">${options.map(option=>`<button type="button" class="condition-choice ${value===option[0]?'active':''}" data-deadline-group="${group}" data-deadline-field="${field}" data-value="${option[0]}" aria-pressed="${value===option[0]?'true':'false'}">${option[1]}</button>`).join('')}</div>`}
